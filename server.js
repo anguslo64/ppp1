@@ -6,15 +6,13 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json()); // 解析 JSON
+app.use(express.json()); // 解析 JSON Body
 
 app.post('/proxy/mops', async (req, res) => {
-  console.log('Received body:', req.body); // 確認收到的 body
-
   try {
     const { companyId } = req.body;
-    if (!companyId) {
-      return res.status(400).json({ error: 'companyId is required' });
+    if (!companyId || typeof companyId !== 'string' || companyId.trim() === '') {
+      return res.status(400).json({ error: 'companyId is required and must be a non-empty string' });
     }
 
     const response = await axios.post(
@@ -22,13 +20,29 @@ app.post('/proxy/mops', async (req, res) => {
       { companyId },
       {
         headers: { 'Content-Type': 'application/json' },
+        timeout: 10000, // 10秒超時
       }
     );
 
+    // 檢查回應狀態碼
+    if (response.status !== 200) {
+      return res.status(response.status).json({ error: 'MOPS API returned non-200 status' });
+    }
+
     res.json(response.data);
   } catch (error) {
-    console.error('Proxy error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Proxy error' });
+    console.error('Proxy error:', error.message || error.toString());
+    // 針對 axios 的錯誤做細節回應
+    if (error.response) {
+      // MOPS API 回傳錯誤
+      res.status(error.response.status).json({ error: error.response.data || 'MOPS API error' });
+    } else if (error.request) {
+      // 無收到回應
+      res.status(504).json({ error: 'No response from MOPS API' });
+    } else {
+      // 其他錯誤
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
 });
 
