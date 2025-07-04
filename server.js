@@ -1,51 +1,45 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const qs = require('qs');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json()); // 解析 JSON Body
+app.use(express.json());
 
 app.post('/proxy/mops', async (req, res) => {
   try {
     const { companyId } = req.body;
-    if (!companyId || typeof companyId !== 'string' || companyId.trim() === '') {
-      return res.status(400).json({ error: 'companyId is required and must be a non-empty string' });
+
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId is required' });
     }
 
     const response = await axios.post(
       'https://mops.twse.com.tw/mops/api/t146sb05',
-      { companyId },
+      qs.stringify({ companyId }), // 使用 x-www-form-urlencoded 格式
       {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000, // 10秒超時
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://mops.twse.com.tw/mops/web/t146sb05',
+        },
       }
     );
 
-    // 檢查回應狀態碼
-    if (response.status !== 200) {
-      return res.status(response.status).json({ error: 'MOPS API returned non-200 status' });
-    }
-
     res.json(response.data);
   } catch (error) {
-    console.error('Proxy error:', error.message || error.toString());
-    // 針對 axios 的錯誤做細節回應
-    if (error.response) {
-      // MOPS API 回傳錯誤
-      res.status(error.response.status).json({ error: error.response.data || 'MOPS API error' });
-    } else if (error.request) {
-      // 無收到回應
-      res.status(504).json({ error: 'No response from MOPS API' });
-    } else {
-      // 其他錯誤
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
+    console.error('[Proxy Error]', error.message);
+    res.status(500).json({
+      error: 'Proxy failed',
+      detail: error.message,
+    });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Proxy server listening on port ${port}`);
+  console.log(`Proxy server running on port ${port}`);
 });
